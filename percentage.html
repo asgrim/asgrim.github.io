@@ -1,22 +1,53 @@
 <html>
 <head>
 <title>Percentage Tool</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <script type="text/javascript">
+var exchangerate = 0;
+var get = function (id) { return document.getElementById(id).value; }
+var set = function (id, value) { document.getElementById(id).value = Math.round(value*100)/100; }
+
+function gex() {
+  var xhr = new XMLHttpRequest();
+  xhr.onreadystatechange = function (r) {
+    if(xhr.readyState < 4) {
+      return;
+    }
+    if(xhr.status !== 200) {
+      return;
+    }
+    if(xhr.readyState === 4) {
+      var o = JSON.parse(xhr.responseText);
+      exchangerate = o.rates.USD;
+      set('exchangerate', exchangerate);
+    }
+  };
+  xhr.open('GET', 'https://api.fixer.io/latest?base=GBP', true);
+  xhr.send('');
+}
+gex();
 function c() {
-  var get = function (id) { return document.getElementById(id).value; }
-  var set = function (id, value) { document.getElementById(id).value = Math.round(value*100)/100; }
+  set('usd_retain', get('retain') * exchangerate);
   set('result', get('retain') / ((100-get('taxpercent'))/100));
+  set('usd_result', get('result') * exchangerate);
   set('taxvalue', get('result') - get('retain'));
+  set('usd_taxvalue', get('taxvalue') * exchangerate);
 }
 </script>
+<style>
+input {
+  width: 60px;
+}
+</style>
 </head>
 <body>
 <h1>&ldquo;Put This Tax Aside&rdquo; Calculator</h1>
 <ul>
-    <li>I want to retain &pound;<input type="text" id="retain" onkeyup="c()" /></li>
+    <li>I want to retain &pound;<input type="text" id="retain" onkeyup="c()" /> / $<input type="text" id="usd_retain" readonly disabled/></li>
     <li>Tax percent is <input type="text" id="taxpercent" onkeyup="c()" value="32.5" />%</li>
-    <li>Retained plus enough for tax = &pound;<input type="text" id="result" readonly disabled/></li>
-    <li>Amount of tax to put aside = &pound;<input type="text" id="taxvalue" readonly disabled/></li>
+    <li>Retained plus enough for tax = &pound;<input type="text" id="result" readonly disabled/> / $<input type="text" id="usd_result" readonly disabled/></li>
+    <li>Amount of tax to put aside = &pound;<input type="text" id="taxvalue" readonly disabled/> / $<input type="text" id="usd_taxvalue" readonly disabled/></li>
+    <li>Exchange rate &pound;1 = $<input type="text" id="exchangerate" readonly disabled/>
 </ul>
 </body>
 </html>
