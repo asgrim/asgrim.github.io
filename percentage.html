@@ -33,21 +33,82 @@ function c() {
   set('taxvalue', get('result') - get('retain'));
   set('usd_taxvalue', get('taxvalue') * exchangerate);
 }
+function setRate(newRate) {
+    set('taxpercent', newRate);
+    c();
+}
 </script>
 <style>
-input {
-  width: 60px;
-}
+    * {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif
+    }
+    ul {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+    }
+    li {
+        padding: 5px 8px;
+    }
+    input {
+        width: 60px;
+    }
+    label, span.field {
+        display: inline-block;
+    }
+    label {
+        width: 230px;
+    }
+    span.field {
+        width: 85px;
+    }
+    li.rates {
+        background-color: #f7ffe2;
+    }
+    li.rates.first {
+        padding-top: 20px;
+    }
+    li.rates.last {
+        padding-bottom: 20px;
+        margin-bottom: 20px;
+    }
 </style>
 </head>
 <body>
 <h1>&ldquo;Put This Tax Aside&rdquo; Calculator</h1>
-<ul>
-    <li>I want to retain &pound;<input type="text" id="retain" onkeyup="c()" /> / $<input type="text" id="usd_retain" readonly disabled/></li>
-    <li>Tax percent is <input type="text" id="taxpercent" onkeyup="c()" value="32.5" />%</li>
-    <li>Retained plus enough for tax = &pound;<input type="text" id="result" readonly disabled/> / $<input type="text" id="usd_result" readonly disabled/></li>
-    <li>Amount of tax to put aside = &pound;<input type="text" id="taxvalue" readonly disabled/> / $<input type="text" id="usd_taxvalue" readonly disabled/></li>
-    <li>Exchange rate &pound;1 = $<input type="text" id="exchangerate" readonly disabled/>
-</ul>
+<form>
+    <ul>
+        <li class="rates first">
+            <label for="exchangerate">Exchange rate</label>
+            <span class="field">&pound; <input type="text" value="1.00" readonly disabled /></span>
+            <span class="field">$ <input type="text" id="exchangerate" readonly disabled /></span>
+            (<a href="javascript:gex();">refresh</a>)
+        </li>
+        <li class="rates last">
+            <label for="taxpercent">Tax percent is</label>
+            <span class="field"><input type="text" id="taxpercent" onkeyup="c()" value="32.5" /> %</span>
+            Set rate to:
+            <a href="javascript:setRate(7.5);">7.5%</a>
+            <a href="javascript:setRate(10);">10%</a>
+            <a href="javascript:setRate(20);">20%</a>
+            <a href="javascript:setRate(32.5);">32.5%</a>
+        </li>
+        <li>
+            <label for="retain">Retained amount after tax</label>
+            <span class="field">&pound; <input type="text" id="retain" onkeyup="c()" /></span>
+            <span class="field">$ <input type="text" id="usd_retain" readonly disabled/></span>
+        </li>
+        <li>
+            <label for="result">Total amount, including tax</label>
+            <span class="field">&pound; <input type="text" id="result" readonly disabled /></span>
+            <span class="field">$ <input type="text" id="usd_result" readonly disabled /></span>
+        </li>
+        <li>
+            <label for="taxvalue">Tax amount</label>
+            <span class="field">&pound; <input type="text" id="taxvalue" readonly disabled /></span>
+            <span class="field">$ <input type="text" id="usd_taxvalue" readonly disabled /></span>
+        </li>
+    </ul>
+</form>
 </body>
 </html>
