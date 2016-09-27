@@ -6,6 +6,7 @@
 var exchangerate = 0;
 var get = function (id) { return document.getElementById(id).value; }
 var set = function (id, value) { document.getElementById(id).value = Math.round(value*100)/100; }
+var setExact = function (id, value) { document.getElementById(id).value = value; }
 
 function gex() {
   var xhr = new XMLHttpRequest();
@@ -19,7 +20,7 @@ function gex() {
     if(xhr.readyState === 4) {
       var o = JSON.parse(xhr.responseText);
       exchangerate = o.rates.USD;
-      set('exchangerate', exchangerate);
+      setExact('exchangerate', exchangerate);
     }
   };
   xhr.open('GET', 'https://api.fixer.io/latest?base=GBP', true);
