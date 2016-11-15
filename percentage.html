@@ -21,6 +21,7 @@ function gex() {
       var o = JSON.parse(xhr.responseText);
       exchangerate = o.rates.USD;
       setExact('exchangerate', exchangerate);
+      c();
     }
   };
   xhr.open('GET', 'https://api.fixer.io/latest?base=GBP', true);
@@ -37,6 +38,10 @@ function c() {
 function setRate(newRate) {
     set('taxpercent', newRate);
     c();
+}
+function manualExchangeRate() {
+  exchangerate = get('exchangerate');
+  c();
 }
 </script>
 <style>
@@ -82,7 +87,7 @@ function setRate(newRate) {
         <li class="rates first">
             <label for="exchangerate">Exchange rate</label>
             <span class="field">&pound; <input type="text" value="1.00" readonly disabled /></span>
-            <span class="field">$ <input type="text" id="exchangerate" readonly disabled /></span>
+            <span class="field">$ <input type="text" id="exchangerate" onkeyup="manualExchangeRate()" /></span>
             (<a href="javascript:gex();">refresh</a>)
         </li>
         <li class="rates last">
