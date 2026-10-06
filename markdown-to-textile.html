@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Markdown to Redmine Textile</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="text/javascript">
+var LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+var ATX_HEADING = /^\s{0,3}(#{1,6})\s+(.*?)(\s+#+)?\s*$/;
+var SETEXT_UNDERLINE = /^\s{0,3}(=+|-+)\s*$/;
+var HORIZONTAL_RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/;
+var FENCE = /^\s*(```|~~~)\s*([\w+#.-]*)\s*$/;
+var TABLE_SEPARATOR = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+
+function convertInline(text) {
+  var stash = [];
+
+  function keep(value) {
+    stash.push(value);
+    return '\u0000' + (stash.length - 1) + '\u0000';
+  }
+
+  function image(src, alt) {
+    return '!' + src + (alt ? '(' + alt + ')' : '') + '!';
+  }
+
+  text = text.replace(/(`+)(.+?)\1/g, function (match, ticks, code) {
+    return keep('@' + code.trim() + '@');
+  });
+  text = text.replace(/\\([\\`*_{}\[\]()#+\-.!|~>])/g, function (match, character) {
+    return keep({'*': '&#42;', '_': '&#95;'}[character] || character);
+  });
+  text = text.replace(/\[!\[([^\]]*)\]\(\s*([^)\s]+)[^)]*\)\]\(\s*([^)\s]+)[^)]*\)/g, function (match, alt, src, href) {
+    return keep(image(src, alt) + ':' + href);
+  });
+  text = text.replace(/!\[([^\]]*)\]\(\s*([^)\s]+)[^)]*\)/g, function (match, alt, src) {
+    return keep(image(src, alt));
+  });
+  text = text.replace(/\[([^\]]+)\]\(\s*([^)\s]+)[^)]*\)/g, function (match, label, href) {
+    return '"' + label + '":' + keep(href);
+  });
+  text = text.replace(/<((?:https?|ftp|mailto):[^>\s]+)>/g, function (match, url) {
+    return keep(url);
+  });
+  text = text.replace(/\bhttps?:\/\/[^\s<>"]+/g, keep);
+
+  text = text.replace(/(\*\*\*|___)(?=\S)(.+?)(?<=\S)\1/g, '\u0001_$2_\u0001');
+  text = text.replace(/(\*\*|__)(?=\S)(.+?)(?<=\S)\1/g, '\u0001$2\u0001');
+  text = text.replace(/\*(?=\S)([^*]+?)(?<=\S)\*/g, '_$1_');
+  text = text.replace(/~~(?=\S)(.+?)(?<=\S)~~/g, '-$1-');
+  text = text.replace(/\u0001/g, '*');
+
+  while (/\u0000\d+\u0000/.test(text)) {
+    text = text.replace(/\u0000(\d+)\u0000/g, function (match, index) {
+      return stash[index];
+    });
+  }
+
+  return text;
+}
+
+function splitTableRow(line) {
+  var row = line.trim();
+  if (row.charAt(0) === '|') {
+    row = row.slice(1);
+  }
+  if (/(^|[^\\])\|$/.test(row)) {
+    row = row.slice(0, -1);
+  }
+  return row.split(/(?<!\\)\|/).map(function (cell) {
+    return cell.trim();
+  });
+}
+
+function tableRow(cells, alignments, isHeader) {
+  return '|' + cells.map(function (cell, column) {
+    var modifier = (isHeader ? '_' : '') + (alignments[column] || '');
+    var content = convertInline(cell.replace(/\\\|/g, '&#124;'));
+    return (modifier && content ? modifier + '. ' : ' ') + content + ' ';
+  }).join('|') + '|';
+}
+
+function markdownToTextile(markdown) {
+  var lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  var out = [];
+  var codeClose = null;
+  var listStack = [];
+  var needBlank = false;
+
+  function lastIsBlank() {
+    return out.length === 0 || out[out.length - 1] === '';
+  }
+
+  function nextNonBlank(from) {
+    for (var j = from + 1; j < lines.length; j++) {
+      if (lines[j].trim() !== '') {
+        return lines[j];
+      }
+    }
+    return '';
+  }
+
+  function pushBlock(text) {
+    if (!lastIsBlank()) {
+      out.push('');
+    }
+    out.push(text);
+    listStack = [];
+    needBlank = true;
+  }
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var fence = line.match(FENCE);
+
+    if (codeClose !== null) {
+      if (fence && fence[2] === '') {
+        out.push(codeClose);
+        codeClose = null;
+        needBlank = true;
+      } else {
+        out.push(line);
+      }
+      continue;
+    }
+
+    if (line.trim() === '') {
+      if (listStack.length && LIST_ITEM.test(nextNonBlank(i))) {
+        continue;
+      }
+      listStack = [];
+      out.push('');
+      continue;
+    }
+
+    if (needBlank && !lastIsBlank()) {
+      out.push('');
+    }
+    needBlank = false;
+
+    if (fence) {
+      pushBlock(fence[2] ? '<pre><code class="' + fence[2] + '">' : '<pre>');
+      codeClose = fence[2] ? '</code></pre>' : '</pre>';
+      needBlank = false;
+      continue;
+    }
+
+    var heading = line.match(ATX_HEADING);
+    if (heading) {
+      pushBlock('h' + heading[1].length + '. ' + convertInline(heading[2]));
+      continue;
+    }
+
+    if (line.indexOf('|') !== -1 && i + 1 < lines.length && TABLE_SEPARATOR.test(lines[i + 1])) {
+      var headerCells = splitTableRow(line);
+      var separatorCells = splitTableRow(lines[i + 1]);
+      if (headerCells.length === separatorCells.length) {
+        var alignments = separatorCells.map(function (cell) {
+          var left = cell.charAt(0) === ':';
+          var right = cell.charAt(cell.length - 1) === ':';
+          return left && right ? '=' : right ? '>' : left ? '<' : '';
+        });
+        pushBlock(tableRow(headerCells, alignments, true));
+        i++;
+        while (i + 1 < lines.length && lines[i + 1].indexOf('|') !== -1) {
+          i++;
+          out.push(tableRow(splitTableRow(lines[i]), alignments, false));
+        }
+        continue;
+      }
+    }
+
+    var item = line.match(LIST_ITEM);
+    var isQuote = /^\s{0,3}>/.test(line);
+
+    if (!item && !isQuote && !listStack.length && i + 1 < lines.length && SETEXT_UNDERLINE.test(lines[i + 1])) {
+      pushBlock('h' + (lines[i + 1].trim().charAt(0) === '=' ? 1 : 2) + '. ' + convertInline(line.trim()));
+      i++;
+      continue;
+    }
+
+    if (HORIZONTAL_RULE.test(line)) {
+      pushBlock('---');
+      continue;
+    }
+
+    if (item) {
+      var indent = item[1].replace(/\t/g, '    ').length;
+      var type = /\d/.test(item[2]) ? '#' : '*';
+      while (listStack.length > 1 && indent < listStack[listStack.length - 1].indent) {
+        listStack.pop();
+      }
+      if (!listStack.length) {
+        if (!lastIsBlank()) {
+          out.push('');
+        }
+        listStack.push({indent: indent, type: type});
+      } else if (indent > listStack[listStack.length - 1].indent) {
+        listStack.push({indent: indent, type: type});
+      } else {
+        if (listStack.length === 1 && listStack[0].type !== type) {
+          out.push('');
+        }
+        listStack[listStack.length - 1].type = type;
+      }
+      out.push(listStack.map(function (level) { return level.type; }).join('') + ' ' + convertInline(item[3]));
+      continue;
+    }
+
+    out.push(convertInline(listStack.length ? line.trim() : line));
+  }
+
+  if (codeClose !== null) {
+    out.push(codeClose);
+  }
+
+  return out.join('\n');
+}
+</script>
+<style>
+    * {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        box-sizing: border-box;
+    }
+    body {
+        margin: 0;
+        padding: 16px;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+    h1 {
+        margin: 0 0 16px;
+        font-size: 1.5em;
+    }
+    .panes {
+        flex: 1;
+        display: flex;
+        gap: 16px;
+        min-height: 0;
+    }
+    .pane {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+    label {
+        font-weight: bold;
+        margin-bottom: 6px;
+    }
+    textarea {
+        flex: 1;
+        width: 100%;
+        padding: 8px;
+        font-family: Menlo, Consolas, "Liberation Mono", monospace;
+        font-size: 13px;
+        resize: none;
+    }
+    button {
+        margin-left: 8px;
+    }
+    textarea[readonly] {
+        background-color: #f7ffe2;
+    }
+    @media (max-width: 700px) {
+        .panes {
+            flex-direction: column;
+        }
+    }
+</style>
+</head>
+<body>
+<h1>Markdown to Redmine Textile</h1>
+<div class="panes">
+    <div class="pane">
+        <label for="markdown">Markdown</label>
+        <textarea id="markdown" autofocus spellcheck="false"></textarea>
+    </div>
+    <div class="pane">
+        <label for="textile">Textile <button type="button" id="copy">Copy</button></label>
+        <textarea id="textile" readonly spellcheck="false"></textarea>
+    </div>
+</div>
+<script type="text/javascript">
+var markdownInput = document.getElementById('markdown');
+var textileOutput = document.getElementById('textile');
+markdownInput.addEventListener('input', function () {
+  textileOutput.value = markdownToTextile(markdownInput.value);
+});
+
+var copyButton = document.getElementById('copy');
+function showCopied() {
+  copyButton.textContent = 'Copied';
+  setTimeout(function () { copyButton.textContent = 'Copy'; }, 1500);
+}
+copyButton.addEventListener('click', function () {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(textileOutput.value).then(showCopied);
+    return;
+  }
+  textileOutput.select();
+  document.execCommand('copy');
+  showCopied();
+});
+</script>
+</body>
+</html>
